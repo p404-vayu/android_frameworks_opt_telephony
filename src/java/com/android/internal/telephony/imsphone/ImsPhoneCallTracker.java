@@ -196,10 +196,8 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
                         ImsPhoneCallTracker.this,
                         (isUnknown ? mForegroundCall : mRingingCall), isUnknown);
 
-                boolean isPseudoDsdaCall = isPseudoDsdaCall();
-                conn.setActiveCallDisconnectedOnAnswer(isPseudoDsdaCall);
-                // If there is an active call and incoming call is not a Psuedo Dsda call.
-                if (mForegroundCall.hasConnections() && !isPseudoDsdaCall) {
+                // If there is an active call.
+                if (mForegroundCall.hasConnections()) {
                     ImsCall activeCall = mForegroundCall.getFirstConnection().getImsCall();
                     if (activeCall != null && imsCall != null) {
                         // activeCall could be null if the foreground call is in a disconnected
@@ -3668,7 +3666,6 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
                 sendCallStartFailedDisconnect(callInfo.first, callInfo.second);
                 break;
             }
-
             case EVENT_RETRY_ON_IMS_WITHOUT_RTT: {
                 Pair<ImsCall, ImsReasonInfo> callInfo = (Pair<ImsCall, ImsReasonInfo>) msg.obj;
 
@@ -3710,7 +3707,6 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
                 } catch (CallStateException e) {
                     sendCallStartFailedDisconnect(callInfo.first, callInfo.second);
                 }
-
                 break;
             }
         }
@@ -4138,21 +4134,6 @@ public class ImsPhoneCallTracker extends CallTracker implements ImsPullCall {
                 isIncomingCallAudio + " isVowifiEnabled=" + isVoWifiEnabled);
 
         return isActiveCallVideo && isActiveCallOnWifi && isIncomingCallAudio && !isVoWifiEnabled;
-    }
-
-    /**
-     * Determines if an incoming call has ACTIVE (or HELD) call on the other SUB.
-     */
-    private boolean isPseudoDsdaCall() {
-        TelephonyManager telephony = TelephonyManager.from(mPhone.getContext());
-        if (telephony.getPhoneCount() > PhoneConstants.MAX_PHONE_COUNT_SINGLE_SIM) {
-            for (Phone phone: PhoneFactory.getPhones()) {
-                if (phone.getSubId() != mPhone.getSubId()) {
-                    return phone.getState() == PhoneConstants.State.OFFHOOK;
-                }
-            }
-        }
-        return false;
     }
 
     /**

@@ -284,6 +284,8 @@ public class DataConnection extends StateMachine {
     private int mDisabledApnTypeBitMask = 0;
 
     protected int mTag;
+
+    /** Data connection id assigned by the modem. This is unique across transports */
     public int mCid;
 
     @HandoverState
@@ -1028,9 +1030,10 @@ public class DataConnection extends StateMachine {
 
         // NR 5G Non-Standalone use LTE cell as the primary cell, the ril technology is LTE in this
         // case. We use NR 5G TCP buffer size when connected to NR 5G Non-Standalone network.
-        if ((rilRat == ServiceState.RIL_RADIO_TECHNOLOGY_LTE
-                || rilRat == ServiceState.RIL_RADIO_TECHNOLOGY_LTE_CA)
-                && isNRConnected()) {
+        if (mTransportType == AccessNetworkConstants.TRANSPORT_TYPE_WWAN
+                && (rilRat == ServiceState.RIL_RADIO_TECHNOLOGY_LTE
+                    || rilRat == ServiceState.RIL_RADIO_TECHNOLOGY_LTE_CA)
+                && isNRConnected()
                 && mPhone.getServiceStateTracker().getNrContextIds().contains(mCid)) {
             ratName = RAT_NAME_5G;
         }
