@@ -22,7 +22,10 @@ import static android.net.NetworkPolicyManager.OVERRIDE_UNMETERED;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.KeepalivePacketData;
 import android.net.LinkAddress;
@@ -324,10 +327,9 @@ public class DataConnection extends StateMachine {
     static final int EVENT_REEVALUATE_RESTRICTED_STATE = BASE + 25;
     static final int EVENT_REEVALUATE_DATA_CONNECTION_PROPERTIES = BASE + 26;
     static final int EVENT_NR_STATE_CHANGED = BASE + 27;
-    protected static final int EVENT_RETRY_CONNECTION = BASE + 28;
 
     private static final int CMD_TO_STRING_COUNT =
-            EVENT_RETRY_CONNECTION - BASE + 1;
+            EVENT_NR_STATE_CHANGED - BASE + 1;
 
     private static String[] sCmdToString = new String[CMD_TO_STRING_COUNT];
     static {
@@ -365,7 +367,6 @@ public class DataConnection extends StateMachine {
                 "EVENT_REEVALUATE_DATA_CONNECTION_PROPERTIES";
         sCmdToString[EVENT_NR_STATE_CHANGED - BASE] =
                 "EVENT_NR_STATE_CHANGED";
-        sCmdToString[EVENT_RETRY_CONNECTION - BASE] = "EVENT_RETRY_CONNECTION";
     }
     // Convert cmd to string or null if unknown
     static String cmdToString(int cmd) {
@@ -1031,9 +1032,10 @@ public class DataConnection extends StateMachine {
         // NR 5G Non-Standalone use LTE cell as the primary cell, the ril technology is LTE in this
         // case. We use NR 5G TCP buffer size when connected to NR 5G Non-Standalone network.
         if (mTransportType == AccessNetworkConstants.TRANSPORT_TYPE_WWAN
-                && (rilRat == ServiceState.RIL_RADIO_TECHNOLOGY_LTE
-                    || rilRat == ServiceState.RIL_RADIO_TECHNOLOGY_LTE_CA)
-                && isNRConnected()
+                && (
+                    rilRat == ServiceState.RIL_RADIO_TECHNOLOGY_LTE 
+                    || rilRat == ServiceState.RIL_RADIO_TECHNOLOGY_LTE_CA
+                ) && isNRConnected()
                 && mPhone.getServiceStateTracker().getNrContextIds().contains(mCid)) {
             ratName = RAT_NAME_5G;
         }
@@ -1655,13 +1657,6 @@ public class DataConnection extends StateMachine {
                                 msg.arg1, SocketKeepalive.ERROR_INVALID_NETWORK);
                     }
                     break;
-                case EVENT_RETRY_CONNECTION:
-                    if (DBG) {
-                        String s = "DcDefaultState ignore EVENT_RETRY_CONNECTION"
-                                + " tag=" + msg.arg1 + ":mTag=" + mTag;
-                        logAndAddLogRec(s);
-                    }
-                    break;
 
                 default:
                     if (DBG) {
@@ -1825,12 +1820,13 @@ public class DataConnection extends StateMachine {
                     return HANDLED;
                 case EVENT_CONNECT:
                     if (DBG) log("DcInactiveState: mag.what=EVENT_CONNECT");
-                    if (isPdpRejectConfigEnabled() && !isDataCallConnectAllowed()) {
-                        if (DBG) log("DcInactiveState: skip EVENT_CONNECT");
-                        return HANDLED;
-                    }
 
                     ConnectionParams cp = (ConnectionParams) msg.obj;
+                    if (isPdpRejectConfigEnabled() && !isDataCallConnectAllowed()) {
+                        if (DBG) log("DcInactiveState: skip EVENT_CONNECT");
+                        cp.mApnContext.decAndGetConnectionGeneration();
+                        return HANDLED;
+                    }
 
                     if (!initConnection(cp)) {
                         log("DcInactiveState: msg.what=EVENT_CONNECT initConnection failed");
@@ -1861,25 +1857,6 @@ public class DataConnection extends StateMachine {
                 case EVENT_DISCONNECT_ALL:
                     if (DBG) log("DcInactiveState: msg.what=EVENT_DISCONNECT_ALL");
                     notifyDisconnectCompleted((DisconnectParams)msg.obj, false);
-                    return HANDLED;
-                case EVENT_RETRY_CONNECTION:
-                    if (DBG) {
-                        log("DcInactiveState: msg.what=EVENT_RETRY_CONNECTION"
-                                + " mConnectionParams=" + mConnectionParams);
-                    }
-                    if (mConnectionParams != null) {
-                        if (initConnection(mConnectionParams)) {
-                            //In case of apn modify, get the latest apn to retry
-                            mApnSetting = mConnectionParams.mApnContext.getApnSetting();
-                            connect(mConnectionParams);
-                            transitionTo(mActivatingState);
-                        } else {
-                            if (DBG) {
-                                log("DcInactiveState: msg.what=EVENT_RETRY_CONNECTION"
-                                    + " initConnection failed");
-                            }
-                        }
-                    }
                     return HANDLED;
                 default:
                     if (VDBG) {
